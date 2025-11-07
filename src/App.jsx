@@ -98,13 +98,22 @@ export default function CalculadoraIVA() {
 
   const calcularIgual = () => {
     const valorActual = parseFloat(displayActual) || 0;
-    const resultado = valorAnterior + valorActual;
+    let resultado;
     
-    setDisplayOperacion(displayOperacion + '=');
+    if (valorAnterior !== 0) {
+      resultado = valorAnterior + valorActual;
+    } else {
+      resultado = valorActual;
+    }
+    
+    if (displayOperacion !== '') {
+      setDisplayOperacion(displayOperacion + '=');
+    }
+    
     setDisplayResultado(resultado.toString());
     setSubtotal(resultado);
+    setDisplayActual(resultado.toString());
     setValorAnterior(0);
-    setDisplayActual('0');
     setEsperandoNuevoNumero(true);
   };
 
@@ -301,7 +310,7 @@ export default function CalculadoraIVA() {
         {/* Créditos */}
         <div className="bg-slate-800 border-t border-slate-700 py-3 px-6">
           <p className="text-center text-gray-400 text-sm">
-            Creada con <span className="text-red-500">❤</span> por <span className="text-blue-400 font-semibold">Estradadev</span> programmer of <span className="text-indigo-400 font-semibold">Astil Básculas</span>
+            Creada con <span className="text-red-500">❤</span> por <span className="text-blue-400 font-semibold">Estradadev</span> programmer of <span className="text-indigo-400 font-semibold">Astil Group</span>
           </p>
         </div>
       </div>
