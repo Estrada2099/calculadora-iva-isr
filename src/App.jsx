@@ -3,118 +3,176 @@ import { Calculator, TrendingDown } from 'lucide-react';
 
 export default function CalculadoraIVA() {
   const [pestana, setPestana] = useState('calculadora');
-  const [displayActual, setDisplayActual] = useState('0');
   const [displayOperacion, setDisplayOperacion] = useState('');
   const [displayResultado, setDisplayResultado] = useState('0');
   const [subtotal, setSubtotal] = useState(0);
-  const [valorAnterior, setValorAnterior] = useState(0);
-  const [esperandoNuevoNumero, setEsperandoNuevoNumero] = useState(false);
+  const [nuevoNumero, setNuevoNumero] = useState(true);
   
   // Para desglose inverso
   const [valorNeto, setValorNeto] = useState('');
 
-  // Actualizar subtotal y display de resultado en tiempo real
-  useEffect(() => {
-    const valorActual = parseFloat(displayActual) || 0;
-    const totalActual = valorAnterior + valorActual;
-    setSubtotal(totalActual);
-    setDisplayResultado(totalActual.toString());
-  }, [displayActual, valorAnterior]);
-
-  const agregarNumero = (num) => {
-    if (esperandoNuevoNumero) {
-      setDisplayActual(num);
-      setDisplayOperacion(displayOperacion + num);
-      setEsperandoNuevoNumero(false);
-    } else {
-      const nuevoValor = displayActual === '0' ? num : displayActual + num;
-      setDisplayActual(nuevoValor);
+  // Evaluar expresión matemática de forma segura
+  const evaluarExpresion = (expr) => {
+    try {
+      // Reemplazar símbolos para evaluación
+      const expresionLimpia = expr
+        .replace(/×/g, '*')
+        .replace(/÷/g, '/')
+        .replace(/−/g, '-');
       
-      // Actualizar display de operación
-      if (displayOperacion === '') {
-        setDisplayOperacion(nuevoValor);
-      } else {
-        // Reemplazar el último número en la operación
-        const partes = displayOperacion.split(/([+])/);
-        partes[partes.length - 1] = nuevoValor;
-        setDisplayOperacion(partes.join(''));
+      // Evaluar usando Function (más seguro que eval)
+      const resultado = Function('"use strict"; return (' + expresionLimpia + ')')();
+      
+      if (isNaN(resultado) || !isFinite(resultado)) {
+        return 0;
       }
+      
+      return resultado;
+    } catch (error) {
+      return 0;
     }
   };
 
-  const agregarDecimal = () => {
-    if (esperandoNuevoNumero) {
-      setDisplayActual('0.');
-      setDisplayOperacion(displayOperacion + '0.');
-      setEsperandoNuevoNumero(false);
-    } else if (!displayActual.includes('.')) {
-      const nuevoValor = displayActual + '.';
-      setDisplayActual(nuevoValor);
+  // Actualizar subtotal en tiempo real
+  useEffect(() => {
+    if (displayOperacion && !displayOperacion.includes('=')) {
+      const ultimoCaracter = displayOperacion.slice(-1);
       
-      // Actualizar display de operación
-      const partes = displayOperacion.split(/([+])/);
-      partes[partes.length - 1] = nuevoValor;
-      setDisplayOperacion(partes.join(''));
+      // Si termina en operador, calcular lo que hay hasta ahora pero no cambiar el display
+      if (['+', '−', '×', '÷', '('].includes(ultimoCaracter)) {
+        const expresionSinOperador = displayOperacion.slice(0, -1);
+        if (expresionSinOperador) {
+          const resultado = evaluarExpresion(expresionSinOperador);
+          setSubtotal(resultado);
+        }
+      } else {
+        // Si no termina en operador, calcular y actualizar TANTO subtotal como display
+        const resultado = evaluarExpresion(displayOperacion);
+        setSubtotal(resultado);
+        setDisplayResultado(resultado.toString());
+      }
+    } else if (displayOperacion.includes('=')) {
+      // Si ya se calculó con =, mantener el resultado
+      const valor = parseFloat(displayResultado) || 0;
+      setSubtotal(valor);
+    } else {
+      const valor = parseFloat(displayResultado) || 0;
+      setSubtotal(valor);
+    }
+  }, [displayOperacion]);
+
+  const agregarCaracter = (caracter) => {
+    if (nuevoNumero && !isNaN(caracter)) {
+      setDisplayOperacion(caracter);
+      setDisplayResultado(caracter);
+      setNuevoNumero(false);
+    } else {
+      const nuevaOperacion = displayOperacion + caracter;
+      setDisplayOperacion(nuevaOperacion);
+      
+      // Si es un número o punto, mostrar el número actual que se está escribiendo
+      if (!isNaN(caracter) || caracter === '.') {
+        // Encontrar el último operador
+        let ultimaPosicion = -1;
+        ['+', '−', '×', '÷', '('].forEach(op => {
+          const pos = nuevaOperacion.lastIndexOf(op);
+          if (pos > ultimaPosicion) ultimaPosicion = pos;
+        });
+        
+        if (ultimaPosicion >= 0) {
+          const numeroActual = nuevaOperacion.substring(ultimaPosicion + 1);
+          setDisplayResultado(numeroActual);
+        } else {
+          setDisplayResultado(nuevaOperacion);
+        }
+      }
+      setNuevoNumero(false);
+    }
+  };
+
+  const agregarOperador = (operador) => {
+    if (displayOperacion === '' && displayResultado !== '0') {
+      setDisplayOperacion(displayResultado + operador);
+    } else if (displayOperacion !== '') {
+      // Si el último caracter es un operador, reemplazarlo
+      const ultimoCaracter = displayOperacion.slice(-1);
+      if (['+', '−', '×', '÷'].includes(ultimoCaracter)) {
+        setDisplayOperacion(displayOperacion.slice(0, -1) + operador);
+      } else {
+        setDisplayOperacion(displayOperacion + operador);
+      }
+    } else {
+      setDisplayOperacion(displayResultado + operador);
+    }
+    // NO cambiar el display de resultado aquí
+    setNuevoNumero(false);
+  };
+
+  const agregarParentesis = () => {
+    const abiertos = (displayOperacion.match(/\(/g) || []).length;
+    const cerrados = (displayOperacion.match(/\)/g) || []).length;
+    
+    if (abiertos === cerrados) {
+      // Agregar paréntesis de apertura
+      if (displayOperacion === '' || ['+', '−', '×', '÷', '('].includes(displayOperacion.slice(-1))) {
+        setDisplayOperacion(displayOperacion + '(');
+      } else {
+        setDisplayOperacion(displayOperacion + '×(');
+      }
+    } else {
+      // Agregar paréntesis de cierre
+      if (!['+', '−', '×', '÷', '('].includes(displayOperacion.slice(-1))) {
+        setDisplayOperacion(displayOperacion + ')');
+      }
+    }
+    setNuevoNumero(false);
+  };
+
+  const agregarDecimal = () => {
+    // Verificar si ya hay un punto en el número actual
+    const ultimoOperador = displayOperacion.match(/[+\−×÷(](?!.*[+\−×÷(])/);
+    const numeroActual = ultimoOperador 
+      ? displayOperacion.split(ultimoOperador[0]).pop() 
+      : displayOperacion;
+    
+    if (!numeroActual.includes('.')) {
+      if (displayOperacion === '' || ['+', '−', '×', '÷', '('].includes(displayOperacion.slice(-1))) {
+        setDisplayOperacion(displayOperacion + '0.');
+        setDisplayResultado('0.');
+      } else {
+        setDisplayOperacion(displayOperacion + '.');
+      }
+      setNuevoNumero(false);
     }
   };
 
   const limpiar = () => {
-    setDisplayActual('0');
     setDisplayOperacion('');
     setDisplayResultado('0');
     setSubtotal(0);
-    setValorAnterior(0);
-    setEsperandoNuevoNumero(false);
+    setNuevoNumero(true);
   };
 
   const borrar = () => {
-    if (displayActual.length > 1) {
-      const nuevoValor = displayActual.slice(0, -1);
-      setDisplayActual(nuevoValor);
+    if (displayOperacion.length > 0) {
+      const nuevaOperacion = displayOperacion.slice(0, -1);
+      setDisplayOperacion(nuevaOperacion);
       
-      // Actualizar display de operación
-      const partes = displayOperacion.split(/([+])/);
-      partes[partes.length - 1] = nuevoValor;
-      setDisplayOperacion(partes.join(''));
-    } else {
-      setDisplayActual('0');
-      
-      // Actualizar display de operación
-      const partes = displayOperacion.split(/([+])/);
-      partes[partes.length - 1] = '0';
-      setDisplayOperacion(partes.join(''));
+      if (nuevaOperacion === '') {
+        setDisplayResultado('0');
+        setSubtotal(0);
+      }
     }
-  };
-
-  const suma = () => {
-    const valorActual = parseFloat(displayActual) || 0;
-    const nuevoTotal = valorAnterior + valorActual;
-    
-    setDisplayOperacion(displayOperacion + '+');
-    setValorAnterior(nuevoTotal);
-    setDisplayActual('0');
-    setEsperandoNuevoNumero(true);
   };
 
   const calcularIgual = () => {
-    const valorActual = parseFloat(displayActual) || 0;
-    let resultado;
-    
-    if (valorAnterior !== 0) {
-      resultado = valorAnterior + valorActual;
-    } else {
-      resultado = valorActual;
-    }
-    
-    if (displayOperacion !== '') {
+    if (displayOperacion !== '' && !displayOperacion.includes('=')) {
+      const resultado = evaluarExpresion(displayOperacion);
       setDisplayOperacion(displayOperacion + '=');
+      setDisplayResultado(resultado.toString());
+      setSubtotal(resultado);
+      setNuevoNumero(true);
     }
-    
-    setDisplayResultado(resultado.toString());
-    setSubtotal(resultado);
-    setDisplayActual(resultado.toString());
-    setValorAnterior(0);
-    setEsperandoNuevoNumero(true);
   };
 
   const iva = subtotal * 0.16;
@@ -128,21 +186,29 @@ export default function CalculadoraIVA() {
   const isrInverso = subtotalInverso * 0.0125;
 
   const botones = [
+    { valor: '()', tipo: 'operador', accion: agregarParentesis },
+    { valor: 'C', tipo: 'limpiar', accion: limpiar },
+    { valor: '⌫', tipo: 'operador', accion: borrar },
+    { valor: '÷', tipo: 'operador', accion: () => agregarOperador('÷') },
+    
     { valor: '7', tipo: 'numero' },
     { valor: '8', tipo: 'numero' },
     { valor: '9', tipo: 'numero' },
-    { valor: 'C', tipo: 'operador', accion: limpiar },
+    { valor: '×', tipo: 'operador', accion: () => agregarOperador('×') },
+    
     { valor: '4', tipo: 'numero' },
     { valor: '5', tipo: 'numero' },
     { valor: '6', tipo: 'numero' },
-    { valor: '⌫', tipo: 'operador', accion: borrar },
+    { valor: '−', tipo: 'operador', accion: () => agregarOperador('−') },
+    
     { valor: '1', tipo: 'numero' },
     { valor: '2', tipo: 'numero' },
     { valor: '3', tipo: 'numero' },
-    { valor: '+', tipo: 'operador', accion: suma },
-    { valor: '0', tipo: 'numero' },
+    { valor: '+', tipo: 'operador', accion: () => agregarOperador('+') },
+    
+    { valor: '0', tipo: 'numero', span2: true },
     { valor: '.', tipo: 'numero', accion: agregarDecimal },
-    { valor: '=', tipo: 'igual', accion: calcularIgual, span2: true },
+    { valor: '=', tipo: 'igual', accion: calcularIgual },
   ];
 
   return (
@@ -216,6 +282,7 @@ export default function CalculadoraIVA() {
                 const esDecimal = boton.valor === '.';
                 const esOperador = boton.tipo === 'operador';
                 const esIgual = boton.tipo === 'igual';
+                const esLimpiar = boton.tipo === 'limpiar';
 
                 return (
                   <button
@@ -223,19 +290,16 @@ export default function CalculadoraIVA() {
                     onClick={() => {
                       if (boton.accion) {
                         boton.accion();
-                      } else if (esNumero || esDecimal) {
-                        if (esDecimal) {
-                          agregarDecimal();
-                        } else {
-                          agregarNumero(boton.valor);
-                        }
+                      } else if (esNumero) {
+                        agregarCaracter(boton.valor);
                       }
                     }}
                     className={`
                       ${boton.span2 ? 'col-span-2' : ''}
                       ${esNumero ? 'bg-slate-700 hover:bg-slate-600 text-white' : ''}
                       ${esDecimal ? 'bg-slate-700 hover:bg-slate-600 text-white' : ''}
-                      ${esOperador ? 'bg-slate-600 hover:bg-slate-500 text-blue-300' : ''}
+                      ${esOperador ? 'bg-slate-600 hover:bg-slate-500 text-orange-300' : ''}
+                      ${esLimpiar ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
                       ${esIgual ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white' : ''}
                       py-5 rounded-xl font-bold text-xl transition-all active:scale-95 shadow-lg
                     `}
